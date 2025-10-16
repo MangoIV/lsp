@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Language.LSP.Server.Control (
+  parseOne,
   -- * Running
   runServerWith,
   runServerWithConfig,
@@ -51,6 +52,7 @@ import Language.LSP.VFS
 import Network.WebSockets qualified as WS
 import Prettyprinter
 import System.IO
+import Debug.Trace
 
 data LspServerLog
   = LspProcessingLog Processing.LspProcessingLog
@@ -225,6 +227,7 @@ ioLoop ioLogger logger clientIn parser serverDefinition vfs sendMsg = do
       case res of
         Nothing -> pure ()
         Just (msg, remainder) -> do
+          traceM "==== SUCCESFULLY PARSED"
           Processing.processMessage pLogger $ BSL.fromStrict msg
           go (parse parser remainder)
 
@@ -238,15 +241,20 @@ parseOne logger clientIn = go
  where
   go (Fail _ ctxs err) = do
     logger <& HeaderParseFail ctxs err `WithSeverity` Error
+    traceM "==== FAILED"
     pure Nothing
   go (Partial c) = do
     bs <- liftIO clientIn
     if BS.null bs
       then do
+        traceM "==== EOF"
         logger <& EOF `WithSeverity` Error
         pure Nothing
-      else go (c bs)
+      else do 
+        traceM $ "==== NOT EOF" <> show bs
+        go (c bs)
   go (Done remainder msg) = do
+    traceM "==== DONE"
     -- TODO: figure out how to re-enable
     -- This can lead to infinite recursion in logging, see https://github.com/haskell/lsp/issues/447
     -- logger <& ParsedMsg (T.decodeUtf8 msg) `WithSeverity` Debug
